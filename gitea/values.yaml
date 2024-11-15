@@ -1,0 +1,35 @@
+service:
+  ssh:
+    externalHost: git-ssh.${BASE_URL}
+    type: LoadBalancer
+    annotations:
+      kube-vip.io/loadbalancerIPs: ${GITEA_SSH_IP}
+gitea:
+  admin:
+    username: gitea
+    password: Password12345
+  config:
+    server:
+      PROTOCOL: http
+      ROOT_URL: https://git.${BASE_URL}
+      DOMAIN: git.${BASE_URL}
+persistence:
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+    - ReadWriteMany
+  storageClass: longhorn-rwx
+postgresql:
+  persistence:
+    size: 1Gi
+
+ingress:
+  enabled: true
+  hosts:
+  - host: git.${BASE_URL}
+    paths: 
+    - path: "/"
+      pathType: "Prefix"
+  tls:
+  - hosts:
+    - git.${BASE_URL}

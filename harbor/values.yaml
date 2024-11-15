@@ -1,0 +1,38 @@
+externalURL: https://harbor.${BASE_URL}
+global:
+  defaultStorageClass: longhorn-rwx
+
+adminPassword: "Harbor12345"
+exposureType: ingress
+
+ingress:
+  core:
+    hostname: harbor.${BASE_URL}
+    tls: true
+    # uncomment for pre-generated secret
+    # extraTls:
+    # - hosts:
+    #     - harbor.${BASE_URL}
+    #   secretName: harbor.${BASE_URL}-tls
+    selfSigned: true # comment if using premade secret
+
+persistence:
+  persistentVolumeClaim:
+    registry:
+      size: 120Gi
+      accessModes:
+      - ReadWriteOnce
+      - ReadWriteMany
+    jobservice:
+      accessModes:
+      - ReadWriteOnce
+      - ReadWriteMany
+registry:
+  server:
+    resourcesPreset: "large"
+  controller:
+    resourcesPreset: "medium"
+core:
+  resourcesPreset: "medium"
+postgresql:
+  resourcesPreset: "small"
