@@ -113,7 +113,13 @@ helm upgrade -i gitea -n git --create-namespace gitea/gitea -f -
 
 ### RKE2 + Rancher 
 
-TODO: CAPI or Terraform?
+As of now, (Nov16-2024), the current recommended way to install Rancher onto Harvester is via a guest cluster. This pattern is common and considered best practice among all infrastructures. This usually involves 1, 3, or 5 VMs running as RKE2 nodes in a control-plane/worker hybrid format. This is a specialized cluster designed to manage all other clusters and typically we do do not 
+
+There are quite a few methods of installing RKE2 and Harvester being RKE2 at its core adds even more options. The two newer methods involve using Kubernetes APIs to create this RKE2 cluster. Harvester being Kubernetes means VMs and other resources can be described using yaml definitions just like a typical containerized application. With this, we can use a simple helmchart to deploy a cluster directly into Harvester. Though that is documented elsewhere.
+
+I will focus on the other method using CAPI (Cluster API) which is basically an in-tree cousin of Rancher's node provisioners. We can kickstart it using a bootstrap cluster on a local workstation. From there, CAPI will build an RKE2 cluster on Harvester based on our specifications. CAPI also provides us a way to declaratively describe resources on the clusters, and we will use that to install Cert-Manager and Rancher itself onto that cluster.
+
+Since the write up for this may be longer, there is a separate section that dives into that. [Click Here](rke2/README.md) to jump into that.
 
 #### Advanced Installation
 Notes on custom ISO + config booting
