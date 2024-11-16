@@ -1,13 +1,27 @@
 {{- range $i := until (.Values.control_plane.node_count | int) }}
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $.Values.cluster_name }}-cp-disk-{{ $i }}
+  namespace: {{ $.Values.cluster_namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ $.Values.control_plane.node_disk_gb }}Gi
+  storageClassName: longhorn-{{ $.Values.vm.image }}
+  volumeMode: Block
+---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   namespace: {{ $.Values.cluster_namespace }}
   annotations:
-    harvesterhci.io/volumeClaimTemplates: |
-      [{"metadata":{"name":"{{ $.Values.cluster_name }}-cp-disk-{{ $i }}","annotations":{"harvesterhci.io/imageId":"{{ $.Values.vm.image_namespace }}/{{ $.Values.vm.image }}","helm.app":"rke2"}},"spec":{"accessModes":["ReadWriteMany"],"resources":{"requests":{"storage":"{{ $.Values.control_plane.node_disk_gb }}Gi"}},"volumeMode":"Block","storageClassName":"longhorn-{{ $.Values.vm.image }}"}}]
-    network.harvesterhci.io/ips: '[]'
+    # harvesterhci.io/volumeClaimTemplates: |
+    #   [{"metadata":{"name":"{{ $.Values.cluster_name }}-cp-disk-{{ $i }}","annotations":{"harvesterhci.io/imageId":"{{ $.Values.vm.image_namespace }}/{{ $.Values.vm.image }}","helm.app":"rke2"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"{{ $.Values.control_plane.node_disk_gb }}Gi"}},"volumeMode":"Block","storageClassName":"longhorn-{{ $.Values.vm.image }}"}}]
+    # network.harvesterhci.io/ips: '[]'
   labels:
     harvesterhci.io/creator: harvester
     harvesterhci.io/os: {{ $.Values.vm.os }}

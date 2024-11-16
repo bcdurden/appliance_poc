@@ -3,16 +3,12 @@ apiVersion: loadbalancer.harvesterhci.io/v1beta1
 kind: IPPool
 metadata:
   name: {{ $.Values.cluster_name }}-pool
-  annotations:
-    helm.sh/hook: post-install
-    helm.sh/hook-weight: "0"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   ranges:
-    - gateway: 10.10.0.1
-      rangeEnd: 10.10.0.5
-      rangeStart: 10.10.0.5
-      subnet: 10.10.0.0/24
+    - gateway: {{ .Values.control_plane.static_ip.gateway }}
+      rangeEnd: {{ .Values.control_plane.vip }}
+      rangeStart: {{ .Values.control_plane.vip }}
+      subnet: {{ .Values.control_plane.static_ip.subnet }}
   selector: {}
 ---
 apiVersion: loadbalancer.harvesterhci.io/v1beta1
@@ -20,10 +16,6 @@ kind: LoadBalancer
 metadata:
   name: {{ .Values.cluster_name }}-lb
   namespace: default
-  annotations: 
-    helm.sh/hook: post-install
-    helm.sh/hook-weight: "1"
-    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   healthCheck:
     failureThreshold: 2

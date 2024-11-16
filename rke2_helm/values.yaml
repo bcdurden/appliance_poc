@@ -1,0 +1,32 @@
+cluster_name: rke2-mgmt
+system_default_registry: ""
+
+rke2_version: v1.29.6+rke2r1
+
+vm:
+  image: ubuntu
+  qemu_agent_install: true          
+  qemu_agent_enable: true           
+  airgapped_image: false  
+
+control_plane:
+  vip: 10.10.0.35 
+  
+  node_count: 3 
+  cpu_count: 8
+  memory_gb: 16
+  
+  ipam: static
+  static_ip:
+    device: enp1s0                
+    gateway: 10.10.0.1
+    subnet: 10.10.0.0/24
+    dns:
+    - 10.10.0.1
+    pool:
+    - 10.10.0.36/24
+    - 10.10.0.37/24
+    - 10.10.0.38/24
+
+worker:
+  node_count: 0
