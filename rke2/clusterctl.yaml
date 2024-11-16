@@ -1,29 +1,41 @@
-
-
 # defaulted values
-CLUSTER_NAME: rke2-hv-test
+CLUSTER_NAME: rke2-mgmt
+
+# this is the namespace within the bootstrap cluster where the resources are deployed
 NAMESPACE: default
+
+# Name the version of RKE2 you wish to install (right now it pulls from the internet)
 RKE2_VERSION: v1.29.6+rke2r1
+
+# Control plane nodes for Rancher need to be in a 1-3-5-etc number pattern. 3 is usually plenty for most deployments
 CONTROL_PLANE_MACHINE_COUNT: 3
-WORKER_MACHINE_COUNT: 0
-CP_CPU_COUNT: 4
-CP_MEMORY: 8Gi
-WORKER_CPU_COUNT: 4
-WORKER_MEMORY: 16Gi
+
+# Size these appropriately based on the estimated amount of clusters to be managed, note there are no workers
+CP_CPU_COUNT: 8
+CP_MEMORY: 16Gi
+
+# disk space on the VMs is mostly just for caching images. Rancher will use this cluster and will not be running other workloads
 VM_DISK_SIZE: 40Gi
 RANCHER_URL: rancher.dell.sienarfleet.systems
 
 # Should have the format <NAMESPACE>/<NAME> for an key that exists on Harvester
 SSH_KEYPAIR: default/command
-# Should have the format <NAMESPACE>/<NAME> for an image that exists on Harvester
-VM_IMAGE_NAME: default/ubuntu
-HARVESTER_ENDPOINT: 10.2.0.10
-VM_NETWORK: lab-workload
-LOAD_BALANCER_IP: 10.2.0.3
-LOAD_BALANCER_GATEWAY: 10.2.0.1
-LOAD_BALANCER_CIDR: 10.2.0.0/24
 
-# custom providers
+# Should have the format <NAMESPACE>/<NAME> for a vm image that exists on Harvester
+VM_IMAGE_NAME: default/ubuntu
+
+# this is your Harvester VIP
+HARVESTER_ENDPOINT: 10.2.0.10
+
+# this network should be created in your harvester environment
+VM_NETWORK: host
+
+# these are the desired loadbalancer params, ensure this IP range is routable to your vm network
+LOAD_BALANCER_IP: 10.10.0.35
+LOAD_BALANCER_GATEWAY: 10.10.0.1
+LOAD_BALANCER_CIDR: 10.10.0.0/24
+
+# custom providers, leave this alone
 providers:
 - name: "harvester"
   url: "https://github.com/rancher-sandbox/cluster-api-provider-harvester/releases/latest/components.yaml"

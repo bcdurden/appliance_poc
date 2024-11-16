@@ -25,7 +25,7 @@ export LOAD_BALANCER_CIDR=$(yq .LOAD_BALANCER_CIDR clusterctl.yaml)
 cat ippool.yaml | envsubst | kubectl apply -f -
 kubectl config use-context k3d-k3s-default
 
-export CLUSTER_NAME=rke2-mgmt
+export CLUSTER_NAME=$(yq .CLUSTER_NAME clusterctl.yaml)
 clusterctl generate cluster --from rke2_template.yaml \
   --config clusterctl.yaml \
   ${CLUSTER_NAME} \
