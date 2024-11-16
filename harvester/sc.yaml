@@ -1,4 +1,4 @@
-allowVolumeExpansion: true
+---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -12,3 +12,20 @@ parameters:
 provisioner: driver.longhorn.io
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
+allowVolumeExpansion: true
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    storageclass.kubernetes.io/is-default-class: 'true'
+    k10.kasten.io/sc-supports-block-mode-exports: "true"
+  name: harvester-xr4000z
+parameters:
+  migratable: "true"
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "30"
+provisioner: driver.longhorn.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true

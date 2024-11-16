@@ -1,0 +1,7 @@
+apiVersion: harvesterhci.io/v1beta1
+kind: KeyPair
+metadata:
+  name: command
+  namespace: default
+spec:
+  publicKey: ${SSH_PUBLIC_KEY_PATH}

@@ -66,11 +66,71 @@ Use a USB-A to MicroUSB cable plugged into one of the XR4000Z blades.
 #### Harvester Configuration
 There are few items in Harvester that should be configured out of the gate. Most notably these are the `ReadWriteMany` storage class, any VM images you wish to preload, as well as configuration of the networking.
 
-Create the `ReadWriteMany` `StoraceClass` using the baked in `StoraceClass` [here](./harvester/sc.yaml)
+#### Longhorn Storage
+TODO
+
+##### Acquiring Harvester kubeconfig
+TODO
+
+##### SSH KeyPair
+Create an SSH keypair locally on your workstation or reuse one. Harvester needs the public key to create a `KeyPair` object that it can use for injection/reference.
+
+Set your `SSH_PUBLIC_KEY_PATH` field in the below command to point at your public key:
+
+```bash
+export SSH_PUBLIC_KEY_PATH=$(cat $HOME/.ssh/command.pub)
+cat harvester/ssh_key.yaml | envsubst | kubectl apply -f -
+```
+
+##### StorageClasses
+
+There are several `StorageClasses` that need to be created for the XR4000Z. One is the default class with replica counts set to 2 as well as a `ReadWriteMany` one.
+
+Create the `StorageClasses` [here](./harvester/sc.yaml)
 
 ```bash
 kubectl apply -f harvester/sc.yaml
 ```
+
+##### Network
+
+Harvester uses a similar network topology to other established solutions and it is based on Multus. There are three key components:
+* Cluster Network - Underhood defines a network bridge that is shared among all nodes, equivalent to a Distributed Switch in vSphere
+* Cluster Network Config - Underhood attaches uplinks and handles bonding rules, equivalent to an Uplink Port Group in vSphere
+* VM Networks - Defines Layer2 network, including VLANs and DHCP params, equivalent to Distributed Port Group in vSphere
+
+Networking config can get complex quickly depending on the customer's intended solution. In order to keep things simple and reduce dependencies for demos on Layer3 VLAN routing, we will just use an 'untagged' VM network and stick to the management Cluster Network (which is predefined and is tied to the management uplink chosen during installation).
+
+To create this VM network, one can go to the UI and create a VM-network that is 'untagged', or you can just apply this yaml using `kubectl`:
+
+```bash
+kubectl apply -f harvester/host_network.yaml
+```
+
+##### VM Image
+
+Creating VMs requires a cloud-init friendly VM to be stored within Harvester when using Linux. Nearly any linux-based distribution has these packages available. Several more prominent distributions supply cloud-friendly versions of their distributions as part of their release cadence.
+
+For ease of use, we will use Ubuntu for now. VM Images can be created manually within the UI and either be uploaded to Harvsester itself or a URL be provided for Harvester to download from. The latter tends to be more reliable in the real-world due to the nature of complex networks that interrupt the websocket connection that the UI uses for uploads. 
+
+Instead of using the UI, we will create one from a [yaml definition](harvester/image.yaml). Within this definition, we are setting the replica count to be 2. This is done because the XR4000Z that is part of this POC only has two worker nodes with a witness node. This means that we do not have a 3rd volume storage location. Because of this, the volume would come up as 'degraded'. We will set this to 2 to avoid the false positive and ensure everything runs smoothy.
+
+Apply the VM image here:
+```bash
+kubectl apply -f harvester/image.yaml
+```
+
+##### CPU Reservation for Longhorn
+TODO
+
+##### Disk Reservation and overprovisioning for Longhorn
+TODO
+
+### Cert-Manager
+TODO
+
+#### Ingress Certificate Generation
+TODO
 
 ### Harbor
 
@@ -110,7 +170,6 @@ cat gitea/values.yaml | envsubst | \
 helm upgrade -i gitea -n git --create-namespace gitea/gitea -f -
 ```
 
-
 ### RKE2 + Rancher 
 
 As of now, (Nov16-2024), the current recommended way to install Rancher onto Harvester is via a guest cluster. This pattern is common and considered best practice among all infrastructures. This usually involves 1, 3, or 5 VMs running as RKE2 nodes in a control-plane/worker hybrid format. This is a specialized cluster designed to manage all other clusters and typically we do do not 
@@ -123,8 +182,5 @@ Since the write up for this may be longer, there is a separate section that dive
 
 #### Advanced Installation
 Notes on custom ISO + config booting
-Precaching images for services airgap
+Pre-caching images for services airgap
 
-# TODO
-cert-manager
-build certs

@@ -1,6 +1,9 @@
 # defaulted values
 CLUSTER_NAME: rke2-mgmt
 
+# defaulted values, should match your context name (inspect $HOME/.kube/config)
+HARVESTER_CONTEXT_NAME: dell
+
 # this is the namespace within the bootstrap cluster where the resources are deployed
 NAMESPACE: default
 
@@ -14,8 +17,11 @@ CONTROL_PLANE_MACHINE_COUNT: 3
 CP_CPU_COUNT: 8
 CP_MEMORY: 16Gi
 
-# disk space on the VMs is mostly just for caching images. Rancher will use this cluster and will not be running other workloads
+# disk space on the VMs is mostly just for caching images. 
+# Rancher will use this cluster and will not be running other workloads
 VM_DISK_SIZE: 40Gi
+
+# this value needs to be a DNS entry
 RANCHER_URL: rancher.dell.sienarfleet.systems
 
 # Should have the format <NAMESPACE>/<NAME> for an key that exists on Harvester
@@ -25,7 +31,7 @@ SSH_KEYPAIR: default/command
 VM_IMAGE_NAME: default/ubuntu
 
 # this is your Harvester VIP
-HARVESTER_ENDPOINT: 10.2.0.10
+HARVESTER_ENDPOINT: 10.10.0.30
 
 # this network should be created in your harvester environment
 VM_NETWORK: host
