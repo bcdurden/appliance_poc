@@ -8,7 +8,9 @@ system_default_registry: ""       #! empty value: use embedded default
 rke2_version: v1.26.10+rke2r2
 
 ssh_pub_key: ""                   #! the public ssh key to inject onto each node, required if you want to fetch a kubeconfig
-
+# carbide:
+#   username:
+#   password:
 vm:
   image_namespace: default        #! namespace in your harvester cluster containing the vm base image
   image: ubuntu                   #! name of base vm image to use for your RKE2 nodes
