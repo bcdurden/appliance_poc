@@ -9,28 +9,60 @@ vm:
   qemu_agent_enable: true           
   airgapped_image: false  
 
-# carbide:
-#   username:
-#   password:
+registry_config:
+  configs:
+    "rgcrprod.azurecr.us":
+      auth:
+        username: test
+        password: test
 
 control_plane:
   vip: 10.10.0.35 
+  loadbalancer_gateway: 10.10.0.1
+  loadbalancer_subnet: 10.10.0.0/24
   
   node_count: 3 
   cpu_count: 8
   memory_gb: 16
-  
-  ipam: static
-  static_ip:
-    device: enp1s0                
-    gateway: 10.10.0.1
-    subnet: 10.10.0.0/24
-    dns:
-    - 10.10.0.1
-    pool:
-    - 10.10.0.36/24
-    - 10.10.0.37/24
-    - 10.10.0.38/24
 
+  ipam: static
+  network:
+  - |
+    network:
+      version: 2
+      renderer: networkd
+      ethernets:
+        enp1s0:
+          dhcp4: no
+          addresses: [ "10.10.0.36/24" ]
+          gateway4: 10.10.0.1
+          nameservers:
+            addresses: 
+            - 10.10.0.1
+  - |
+    network:
+      version: 2
+      renderer: networkd
+      ethernets:
+        enp1s0:
+          dhcp4: no
+          addresses: [ "10.10.0.37/24" ]
+          gateway4: 10.10.0.1
+          nameservers:
+            addresses: 
+            - 10.10.0.1
+  - |
+    network:
+      version: 2
+      renderer: networkd
+      ethernets:
+        enp1s0:
+          dhcp4: no
+          addresses: [ "10.10.0.38/24" ]
+          gateway4: 10.10.0.1
+          nameservers:
+            addresses: 
+            - 10.10.0.1
+  
 worker:
   node_count: 0

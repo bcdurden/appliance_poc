@@ -8,9 +8,14 @@ system_default_registry: ""       #! empty value: use embedded default
 rke2_version: v1.26.10+rke2r2
 
 ssh_pub_key: ""                   #! the public ssh key to inject onto each node, required if you want to fetch a kubeconfig
-# carbide:
-#   username:
-#   password:
+
+# registry_config:
+#   configs:
+#     "rgcrprod.azurecr.us":
+#       auth:
+#         username: test
+#         password: test
+
 vm:
   image_namespace: default        #! namespace in your harvester cluster containing the vm base image
   image: ubuntu                   #! name of base vm image to use for your RKE2 nodes
@@ -28,19 +33,25 @@ control_plane:
   cpu_count: 4
   memory_gb: 8
   node_disk_gb: 40
+  loadbalancer_gateway: 10.10.0.1
+  loadbalancer_subnet: 10.10.0.0/24
 
   vip:                            #! this is the VIP for the Harvester LoadBalancer object, ensure it is a routable IP
-  ipam: dhcp                      #! this can be dhcp or static, static requires the static ip fields
-  static_ip:
-    device: enp1s0                #! network device name on your VMs, may differ depending on host OS
-    gateway: 10.10.0.1
-    subnet: 10.10.0.0/24
-    dns:
-    - 10.10.0.1
-    pool:                         #! this is an available IP pool to be used for control-plane nodes when they are deployed, they are deterministic
-    - 10.10.0.6/24
-    - 10.10.0.7/24
-    - 10.10.0.8/24
+  ipam: dhcp                      #! this can be dhcp or static, static requires an equal amount of cloud-init network-data entries
+
+  # network:
+  # - |   #! ubuntu example
+  #   network:
+  #     version: 2
+  #     renderer: networkd
+  #     ethernets:
+  #       enp1s0:
+  #         dhcp4: no
+  #         addresses: [ "10.10.0.6/24" ]
+  #         gateway4: 10.10.0.1
+  #         nameservers:
+  #           addresses: 
+  #           - 10.10.0.1
 
 worker:
   node_count: 1
@@ -48,5 +59,18 @@ worker:
   memory_gb: 8
   node_disk_gb: 40
 
-  ipam: dhcp
-  static_ip_pool: {}
+  ipam: dhcp                      #! this can be dhcp or static, static requires an equal amount of cloud-init network-data entries
+
+  # network:
+  # - |
+  #   network:
+  #     version: 2
+  #     renderer: networkd
+  #     ethernets:
+  #       enp1s0:
+  #         dhcp4: no
+  #         addresses: [ "10.10.0.20/24" ]
+  #         gateway4: 10.10.0.1
+  #         nameservers:
+  #           addresses: 
+  #           - 10.10.0.1

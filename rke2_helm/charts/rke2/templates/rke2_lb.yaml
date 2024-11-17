@@ -5,10 +5,10 @@ metadata:
   name: {{ $.Values.cluster_name }}-pool
 spec:
   ranges:
-    - gateway: {{ .Values.control_plane.static_ip.gateway }}
+    - gateway: {{ .Values.control_plane.loadbalancer_gateway }}
       rangeEnd: {{ .Values.control_plane.vip }}
       rangeStart: {{ .Values.control_plane.vip }}
-      subnet: {{ .Values.control_plane.static_ip.subnet }}
+      subnet: {{ .Values.control_plane.loadbalancer_subnet }}
   selector: {}
 ---
 apiVersion: loadbalancer.harvesterhci.io/v1beta1
