@@ -1,0 +1,10 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: rke2-mgmt    
+  namespace: default
+spec:
+  bootstrap: false
+  targetNamespace: default
+  valuesContent: ""
+  chartContent: ""

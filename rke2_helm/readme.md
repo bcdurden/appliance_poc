@@ -70,3 +70,11 @@ export RANCHER_URL=rancher.dell.sienarfleet.systems
 export RANCHER_REPLICAS=3
 cat carbide_rancher.yaml | envsubst | kubectl --kubeconfig kube.yaml apply -f - --wait
 ```
+
+## Advanced
+To install RKE2 without helm at all, use the [package_rke2helmcrd.sh](./package_rke2helmcrd.sh) script. Make sure your [values.yaml](./values.yaml) file is set.
+
+```bash
+./package_rke2helmcrd.sh 
+kubectl apply -f rke2helmcrd.yaml
+```
