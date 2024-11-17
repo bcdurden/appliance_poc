@@ -9,6 +9,10 @@ vm:
   qemu_agent_enable: true           
   airgapped_image: false  
 
+# carbide:
+#   username:
+#   password:
+
 control_plane:
   vip: 10.10.0.35 
   

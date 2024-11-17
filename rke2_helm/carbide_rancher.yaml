@@ -1,0 +1,27 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: carbide-rancher    
+  namespace: default
+spec:
+  bootstrap: false
+  targetNamespace: cattle-system
+  createNamespace: true
+  set:
+    hostname: ${RANCHER_URL}
+    replicas: ${RANCHER_REPLICAS}
+    bootstrapPassword: admin
+    rancherImage: rgcrprod.azurecr.us/rancher/rancher
+    systemDefaultRegistry: rgcrprod.azurecr.us
+    carbide.whitelabel.image: rgcrprod.azurecr.us/carbide/carbide-whitelabel
+  valuesContent: |-
+    global:
+      cattle:
+        psp:
+          enabled: false
+    ingress:
+      tls:
+        source: rancher
+  repo: https://rancherfederal.github.io/carbide-charts
+  chart: rancher
+  version: v2.9.3
