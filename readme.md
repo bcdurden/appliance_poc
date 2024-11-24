@@ -27,11 +27,15 @@ This will cover the manual install process including tools as part of the applia
 
 This install path will be quasi-airgapped. A full airgap requires a few extra steps such as image caching for Harbor that can be covered in a more advanced/complete installation process.
 
+Also, this install will be a full install. There also exists a path to install binaries only so that when the node boots, the install automatically starts without requiring the ISO mounted to USB or other media.
+
 ### Harvester Government
 
 Harvester Government is a paid product from Rancher Government Solutions (RGS). This includes enablement of the FIPS kernel within the immutable OS (Elemental) as well as pre-stigging of Harvester, including all the components comprising it (Elemental, RKE2, Longhorn, Multus, etc).
 
 Install on two main nodes via ISO. Ensure static addresses set including VIP. Minimum requirement of one network for management. For IO performance, ensure secondary uplink is available to offload storage replication.
+
+To acquire the ISO for this install, please contact RGS for details. The community version can also be used here instead as a PoC, but will not have all of the security features available. See [github releases](https://github.com/harvester/harvester/releases). As of this writing, the current Harvester release is 1.3.2. The release of 1.4.0 is emminent.
 
 #### Witness Node
 
@@ -67,7 +71,13 @@ Use a USB-A to MicroUSB cable plugged into one of the XR4000Z blades.
 There are few items in Harvester that should be configured out of the gate. Most notably these are the `ReadWriteMany` storage class, any VM images you wish to preload, as well as configuration of the networking.
 
 #### Longhorn Storage
-TODO
+By default, in Harvester's Longhorn, the CPU reservation percentage is set at 25%. In nearly all Edge use cases, this is considered overkill. It is suggested to dial this down to a value you find more useful. It can always be raised later if it is found that Longhorn is being CPU starved to complete replication tasks.
+
+Enabling Developer UIs like Longhorn require going into the profile config menu. Click the top-right of Harvester on the profile picture and select `Preferences`. From there, scroll down and select `Enable Extension developer features`. 
+
+Go to the main Harvester dashboard by clicking the flag or logo in the top left. Click `Support` at the bottom left of the screen. From here you can choose the Longhorn UI and it will open in a new window.
+
+Via the Longhorn UI, this value can be set in the General Settings. For Edge use cases that the XR4000 will run into, it likely does not need to be higher than 5%.
 
 ##### Acquiring Harvester kubeconfig
 TODO
@@ -178,7 +188,12 @@ There are quite a few methods of installing RKE2 and Harvester being RKE2 at its
 
 The other method is using CAPI (Cluster API) which is basically an in-tree cousin of Rancher's node provisioners. We can kickstart it using a bootstrap cluster on a local workstation. From there, CAPI will build an RKE2 cluster on Harvester based on our specifications. CAPI also provides us a way to declaratively describe resources on the clusters, and we will use that to install Cert-Manager and Rancher itself onto that cluster. Harvester's CAPI provider is still in alpha currently and so there may be bugs with this approach. [Click Here](rke2/README.md)
 
-#### Advanced Installation
+### Advanced Installation
+
+#### Overcommit Configuration
+
+For a dive into how overcommit works and how to change it in Harvester, see [this gist](https://gist.github.com/bcdurden/f30b7a80bac825f0b34267df99ceff6e#file-longhorn_allocations-md)
+
 Notes on custom ISO + config booting
 Pre-caching images for services airgap
 
