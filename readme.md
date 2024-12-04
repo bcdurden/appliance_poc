@@ -80,7 +80,26 @@ Go to the main Harvester dashboard by clicking the flag or logo in the top left.
 Via the Longhorn UI, this value can be set in the General Settings. For Edge use cases that the XR4000 will run into, it likely does not need to be higher than 5%.
 
 ##### Acquiring Harvester kubeconfig
-TODO
+The Harvester API is very similar to the Rancher API though some of the paths are different. But it can be used to generate a service-account-based kubeconfig based around the credentials you provide. If you've already created this file at some other point in time, you can skip this step. Note that this file is different than the one that resides on the Harvester node itself. This one has an expiry and is service-account based.
+
+Like the Rancher API, the Harvester API uses the same API token mechanism at a different endpoint. So I'm going to define a few environment variables here. I need my harvester VIP and the admin password:
+```bash
+export HARVESTER_VIP=86.75.30.9
+export PASSWORD="mypassword"
+```
+
+Next I generate the API token with these values:
+```bash
+export TOKEN=$(curl -sk -X POST https://$HARVESTER_VIP/v3-public/localProviders/local?action=login -H 'content-type: application/json' -d '{"username":"admin","password":"'$PASSWORD'"}' | jq -r '.token')
+```
+
+With this token, I can make Harvester API calls, like requesting creation of a new kubeconfig for my use:
+```bash
+curl -sk https://$HARVESTER_VIP/v1/management.cattle.io.clusters/local?action=generateKubeconfig -H "Authorization: Bearer ${TOKEN}" -X POST -H 'content-type: application/json' | jq -r .config > kube.yaml
+chmod 600 kube.yaml
+```
+
+Now I have a kubeconfig defined in `kube.yaml` and can make kubectl commands using it later!
 
 ##### SSH KeyPair
 Create an SSH keypair locally on your workstation or reuse one. Harvester needs the public key to create a `KeyPair` object that it can use for injection/reference.
@@ -94,7 +113,7 @@ cat harvester/ssh_key.yaml | envsubst | kubectl apply -f -
 
 ##### StorageClasses
 
-There are several `StorageClasses` that need to be created for the XR4000Z. One is the default class with replica counts set to 2 as well as a `ReadWriteMany` one.
+There are several `StorageClasses` that need to be created for the XR4000Z. One is the default class with replica counts set to 2 as well as a `ReadWriteMany` one.f
 
 Create the `StorageClasses` [here](./harvester/sc.yaml)
 
