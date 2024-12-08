@@ -1,25 +1,37 @@
 # Dell Appliance Docs
 
 ## SBOM
-* Harvester Government 1.3.2
+* Harvester Government 1.3.2 or Harvester Community 1.3.2
 * Harbor
 * Gitea
 * Keycloak
-* Rancher 2.9.4 (or 2.10.0)
+* Rancher 2.9.x (or 2.10.x)
 
 ## Kubernetes Basics
-* kubecm
+* [kubecm](https://kubecm.cloud)
 * helm
 * kubectl
-* kubeconfigs in Harvester
+* clusterctl (for CAPI)
+* [k3d](https://k3d.io/stable/) (for CAPI)
 
 ## DNS
-* wildcard domain for harveter
+* Wildcard DNS entry for Ingress (ie. *.mycluster.com)
 
 ## Certificates
-* cert-manager or not
-* wildcard certs
 
+There are several methods of creating certs, the easiest path is using `cert-manager` to do so. Sometimes, however, this isn't possible. So using pre-created certs from another source is perfectly viable. This section isn't going to cover creation of certs or diving into the finer points there as its a heady topic. But it is suggested to use `cert-manager` as it is a K8S-native way of managing certs easily, especially for PoCs.
+
+### Cert-Manager
+
+[Cert-manager](https://cert-manager.io) is an open-source Kubernetes add-on that automates the management and issuance of TLS/SSL certificates. It simplifies securing communication between services by automating certificate lifecycle tasks.
+
+Key Features:
+
+* Automates certificate issuance with CAs (e.g., Let’s Encrypt, Vault, self-signed).
+* Handles automatic renewal of expiring certificates.
+* Integrates with Kubernetes resources like Ingress controllers.
+* Supports ACME protocol for Let’s Encrypt certificates.
+* Provides CRDs like Certificate, Issuer, and ClusterIssuer.
 
 ## Install
 
@@ -36,6 +48,8 @@ Harvester Government is a paid product from Rancher Government Solutions (RGS). 
 Install on two main nodes via ISO. Ensure static addresses set including VIP. Minimum requirement of one network for management. For IO performance, ensure secondary uplink is available to offload storage replication.
 
 To acquire the ISO for this install, please contact RGS for details. The community version can also be used here instead as a PoC, but will not have all of the security features available. See [github releases](https://github.com/harvester/harvester/releases). As of this writing, the current Harvester release is 1.3.2. The release of 1.4.0 is emminent.
+
+Note: Everything in this writeup can be done with Harvester Comunity. When it comes time to validate hardware and do more advanced field-testing, it is suggested to use the true Harvester Government release as it has all of the FIPS 140-3, security controls, and STIG pre-applied.
 
 #### Witness Node
 
