@@ -1,0 +1,488 @@
+apiVersion: fleet.cattle.io/v1alpha1
+kind: Bundle
+metadata:
+  name: mgmt-cluster
+  namespace: fleet-local
+spec:
+  helm:
+    chart: ./rke2
+    # releaseName: rke2-mgmt
+    values:
+      cluster_name: rke2-mgmt
+      control_plane:
+        cpu_count: 8
+        files:
+        - content: |
+            apiVersion: helm.cattle.io/v1
+            kind: HelmChart
+            metadata:
+              name: cert-manager
+              namespace: default      
+            spec:
+              bootstrap: true
+              targetNamespace: cert-manager
+              createNamespace: true
+              valuesContent: |-
+                securityContext:
+                  runAsNonRoot: true
+                crds:
+                  enabled: true
+              version: v1.16.1
+              repo: https://charts.jetstack.io
+              chart: cert-manager
+          owner: root
+          path: /var/lib/rancher/rke2/server/manifests/certmanager.yaml
+        - content: |
+            apiVersion: helm.cattle.io/v1
+            kind: HelmChart
+            metadata:
+              name: rancher
+              namespace: default      
+            spec:
+              bootstrap: false
+              targetNamespace: cattle-system
+              createNamespace: true
+              set:
+                hostname: rancher.lab.sienarfleet.systems
+                replicas: 3
+                bootstrapPassword: admin
+              valuesContent: |-
+                global:
+                  cattle:
+                    psp:
+                      enabled: false
+                ingress:
+                  tls:
+                    source: rancher
+              repo: https://releases.rancher.com/server-charts/stable
+              chart: rancher
+              version: v2.10.1
+          owner: root
+          path: /var/lib/rancher/rke2/server/manifests/rancher.yaml
+        ipam: static
+        loadbalancer_gateway: 10.2.0.1
+        loadbalancer_subnet: 10.2.0.0/24
+        memory_gb: 16
+        network:
+        - |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              enp1s0:
+                dhcp4: no
+                addresses: [ "10.2.0.21/24" ]
+                gateway4: 10.2.0.1
+                nameservers:
+                  addresses: 
+                  - 10.2.0.1
+        - |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              enp1s0:
+                dhcp4: no
+                addresses: [ "10.2.0.22/24" ]
+                gateway4: 10.2.0.1
+                nameservers:
+                  addresses: 
+                  - 10.2.0.1
+        - |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              enp1s0:
+                dhcp4: no
+                addresses: [ "10.2.0.23/24" ]
+                gateway4: 10.2.0.1
+                nameservers:
+                  addresses: 
+                  - 10.2.0.1
+        node_count: 3
+        vip: 10.2.0.20
+      network_name: lab-workload
+      registry_config:
+        configs:
+          rgcrprod.azurecr.us:
+            auth:
+              password: test
+              username: test
+      rke2_version: v1.29.6+rke2r1
+      ssh_pub_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDK3vpDMfNKbXTkpOwC77k5xvEpUAcNyJa6pYT17YMbzvHuugSJRiouLElDtpqktto6plkDdrTRXnkDA3aVxUycCl/4IrnCEehlg8LGgFxKASNeXQYL0URIWRDicyJaolg5bFdcu3gYTA0JBtApiebrml6bj9cJGnS8lqRK9wmWIFv5lPICcrZMsw1AIRhghGI5BupUnttD+muHspAiGfjTbiiCvKo3fLmEMQ9pt/46wQuPbzOCVChpJByVG9AKO9IpdkOGgKeuy2y98ZxJIHBAx4B49jDfA8NNfyEBIdgiIvlv6QXgjFbazI5buLYM/RK36kf9JjYNBySZJuA3VMbHnWmWvZYBQUA6ypVMc4Wzvd3hhFmNQn1W+NEHl6v+bCDeo5QIv5dkpIoDgJd8CvWQ42bb2bi7zyO32v2zfaW03eDCeopFAKditMPhjqai0S2W4LRt7dRKEOCvUqPFYqZ99nBk1mmTWG8Gpp7VA/+shn171Yc/wDCwBcEyciqOYNtnW55O3eCiBHsnBcEFKy80zHJ1jckDSluypwBrsooYV5WKS8O+jqGyYfdruJ8oUCPw72b0JHs5AmFCRuhzOU6cZP6Ynghs1SkdVtq722uFjmDUR0X8+hoIZDEWutw6+91YhwnodA3MmGHtInlY+URqdz6TltOMP2X2vSMohnh2zQ==
+      system_default_registry: ""
+      vm:
+        airgapped_image: false
+        image: ubuntu
+        qemu_agent_enable: true
+        qemu_agent_install: true
+      worker:
+        node_count: 0
+    valuesFiles:
+    - values.yaml
+
+  resources:
+  - content: |2-
+      helm:
+        chart: ./rke2
+        releaseName: rke2-mgmt
+        valuesFiles:
+          - values.yaml
+    name: fleet.yaml
+  - content: |-
+      apiVersion: v2
+      name: rke2-cluster
+      description: RKE2 cluster designed for usage directly on Harvester
+
+      type: application
+      version: 0.1.1
+      appVersion: 0.1.1
+    name: rke2/Chart.yaml
+  - content: "{{- range $i := until (.Values.control_plane.node_count | int) }}\n---\napiVersion:
+      v1\nkind: Secret\nmetadata:\n  name: {{ $.Values.cluster_name }}-cp-{{ $i }}-cloudinit\n
+      \ namespace: {{ $.Values.cluster_namespace }}\nstringData:\n  userdata: |\n
+      \   #cloud-config\n    {{- if $.Values.vm.qemu_agent_install }}\n    package_update:
+      true\n    packages:\n      - qemu-guest-agent\n    {{- end }}\n    write_files:
+      \n    {{- if $.Values.control_plane.files }}\n{{ $.Values.control_plane.files
+      | toYaml | indent 4 }}\n    {{- end }}\n    - path: /etc/rancher/rke2/config.yaml\n
+      \     owner: root\n      content: |\n        token: {{ $.Values.shared_token
+      }}\n        {{- if ne $i 0 }}\n        server: https://{{ $.Values.control_plane.vip
+      }}:9345\n        {{- end }}\n        system-default-registry: {{ $.Values.system_default_registry
+      }}\n        tls-san:\n          - {{ $.Values.cluster_name }}-cp-{{ $i }}\n
+      \         - {{ $.Values.control_plane.vip }}\n        secrets-encryption: true\n
+      \       write-kubeconfig-mode: 0640\n        use-service-account-credentials:
+      true\n    {{- if hasKey $.Values \"registry_config\" }}\n    - path: /etc/rancher/rke2/registries.yaml\n
+      \     owner: root\n      content: |-\n{{ $.Values.registry_config | toYaml |
+      indent 8 }}\n    {{- end }}\n    - path: /etc/hosts\n      owner: root\n      content:
+      |\n        127.0.0.1 localhost\n        127.0.0.1 {{$.Values.cluster_name }}-cp-{{
+      $i }}\n    runcmd:\n    {{- if $.Values.vm.qemu_agent_enable }}\n    - - systemctl\n
+      \     - enable\n      - '--now'\n      - qemu-guest-agent.service\n    {{- end
+      }}\n    {{- if not $.Values.vm.airgapped_image }}\n    - mkdir -p /var/lib/rancher/rke2-artifacts
+      && wget https://get.rke2.io -O /var/lib/rancher/install.sh && chmod +x /var/lib/rancher/install.sh\n
+      \   {{- end}}\n    - INSTALL_RKE2_VERSION={{ $.Values.rke2_version }} /var/lib/rancher/install.sh\n
+      \   - systemctl enable rke2-server.service\n    - useradd -r -c \"etcd user\"
+      -s /sbin/nologin -M etcd -U\n    - systemctl start rke2-server.service\n    ssh_authorized_keys:
+      \n    - {{ $.Values.ssh_pub_key }}\n  {{- if ne $.Values.control_plane.ipam
+      \"dhcp\" }}\n  {{- if hasKey $.Values.control_plane \"network\" }}\n  networkdata:
+      |\n{{ index $.Values.control_plane.network $i | indent 4 }}\n  {{- end}}\n  {{-
+      else}}\n  networkdata: \"\"\n  {{- end}}\n{{- end}}"
+    name: rke2/templates/rke2_cp_secret.yaml
+  - content: |-
+      {{- range $i := until (.Values.control_plane.node_count | int) }}
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: {{ $.Values.cluster_name }}-cp-disk-{{ $i }}
+        namespace: {{ $.Values.cluster_namespace }}
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: {{ $.Values.control_plane.node_disk_gb }}Gi
+        storageClassName: longhorn-{{ $.Values.vm.image }}
+        volumeMode: Block
+      ---
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        namespace: {{ $.Values.cluster_namespace }}
+        annotations:
+          # harvesterhci.io/volumeClaimTemplates: |
+          #   [{"metadata":{"name":"{{ $.Values.cluster_name }}-cp-disk-{{ $i }}","annotations":{"harvesterhci.io/imageId":"{{ $.Values.vm.image_namespace }}/{{ $.Values.vm.image }}","helm.app":"rke2"}},"spec":{"accessModes":["ReadWriteOnce"],"resources":{"requests":{"storage":"{{ $.Values.control_plane.node_disk_gb }}Gi"}},"volumeMode":"Block","storageClassName":"longhorn-{{ $.Values.vm.image }}"}}]
+          # network.harvesterhci.io/ips: '[]'
+        labels:
+          harvesterhci.io/creator: harvester
+          harvesterhci.io/os: {{ $.Values.vm.os }}
+        name: {{ $.Values.cluster_name }}-cp-{{ $i }}
+        finalizers:
+          - harvesterhci.io/VMController.UnsetOwnerOfPVCs
+      spec:
+        runStrategy: RerunOnFailure
+        template:
+          metadata:
+            annotations: {}
+            labels:
+              harvesterhci.io/vmName: {{ $.Values.cluster_name }}-cp-{{ $i }}
+          spec:
+            domain:
+              machine:
+                type: ''
+              cpu:
+                cores: {{ $.Values.control_plane.cpu_count }}
+                sockets: 1
+                threads: 1
+              devices:
+                interfaces:
+                  - bridge: {}
+                    model: virtio
+                    name: default
+                disks:
+                  - name: disk-0
+                    disk:
+                      bus: virtio
+                    bootOrder: 1
+                  - name: cloudinitdisk
+                    disk:
+                      bus: virtio
+                hostDevices: []
+              resources:
+                limits:
+                  memory: {{ $.Values.control_plane.memory_gb }}Gi
+                  cpu: {{ $.Values.control_plane.cpu_count }}
+              features:
+                acpi:
+                  enabled: {{ $.Values.vm.uefi_enabled }}
+              firmware:
+                bootloader:
+                  efi:
+                    secureBoot: false
+            evictionStrategy: LiveMigrate
+            hostname: {{ $.Values.cluster_name }}-cp-{{ $i }}
+            networks:
+              - name: default
+                multus:
+                  networkName: default/{{ $.Values.network_name }}
+            volumes:
+              - name: disk-0
+                persistentVolumeClaim:
+                  claimName: {{ $.Values.cluster_name }}-cp-disk-{{ $i }}
+              - name: cloudinitdisk
+                cloudInitNoCloud:
+                  secretRef:
+                    name: {{ $.Values.cluster_name }}-cp-{{ $i }}-cloudinit
+                  networkDataSecretRef:
+                    name: {{ $.Values.cluster_name }}-cp-{{ $i }}-cloudinit
+            affinity: {}
+            terminationGracePeriodSeconds: 120
+      {{- end }}
+    name: rke2/templates/rke2_cp_vm.yaml
+  - content: |-
+      ---
+      apiVersion: loadbalancer.harvesterhci.io/v1beta1
+      kind: IPPool
+      metadata:
+        name: {{ $.Values.cluster_name }}-pool
+      spec:
+        ranges:
+          - gateway: {{ .Values.control_plane.loadbalancer_gateway }}
+            rangeEnd: {{ .Values.control_plane.vip }}
+            rangeStart: {{ .Values.control_plane.vip }}
+            subnet: {{ .Values.control_plane.loadbalancer_subnet }}
+        selector: {}
+      ---
+      apiVersion: loadbalancer.harvesterhci.io/v1beta1
+      kind: LoadBalancer
+      metadata:
+        name: {{ .Values.cluster_name }}-lb
+        namespace: default
+      spec:
+        healthCheck:
+          failureThreshold: 2
+          port: 6443
+          successThreshold: 3
+          timeoutSeconds: 5
+          periodSeconds: 5
+        ipam: pool
+        ipPool: {{ .Values.cluster_name }}-pool
+        listeners:
+          - name: k8s-api
+            port: 6443
+            protocol: TCP
+            backendPort: 6443
+          - name: ingress
+            port: 443
+            protocol: TCP
+            backendPort: 443
+          - name: join
+            port: 9345
+            protocol: TCP
+            backendPort: 9345
+        workloadType: vm
+        backendServerSelector:
+          harvesterhci.io/vmName:
+          {{- range $i := until (.Values.control_plane.node_count | int)}}
+          - {{ $.Values.cluster_name }}-cp-{{ $i }}
+          {{- end}}
+    name: rke2/templates/rke2_lb.yaml
+  - content: "{{- range $i := until (.Values.worker.node_count | int) }}\n---\napiVersion:
+      v1\nkind: Secret\nmetadata:\n  name: {{ $.Values.cluster_name }}-worker-{{ $i
+      }}-cloudinit\n  namespace: {{ $.Values.cluster_namespace }}\nstringData:\n  userdata:
+      |\n    #cloud-config\n    {{- if $.Values.vm.qemu_agent_install }}\n    package_update:
+      true\n    packages:\n      - qemu-guest-agent\n    {{- end }}\n    write_files:
+      \n    {{- if $.Values.worker.files }}\n{{ $.Values.worker.files | toYaml | indent
+      4 }}\n    {{- end }}\n    - path: /etc/rancher/rke2/config.yaml\n      owner:
+      root\n      content: |\n        token: {{ $.Values.shared_token }}\n        {{-
+      if ne $i 0 }}\n        server: https://{{ $.Values.control_plane.vip }}:9345\n
+      \       {{- end }}\n        system-default-registry: {{ $.Values.system_default_registry
+      }}\n        secrets-encryption: true\n        write-kubeconfig-mode: 0640\n
+      \       use-service-account-credentials: true\n    {{- if hasKey $.Values \"registry_config\"
+      }}\n    - path: /etc/rancher/rke2/registries.yaml\n      owner: root\n      content:
+      |-\n{{ $.Values.registry_config | toYaml | indent 8 }}\n    {{- end }}\n    -
+      path: /etc/hosts\n      owner: root\n      content: |\n        127.0.0.1 localhost\n
+      \       127.0.0.1 {{$.Values.cluster_name }}-worker-{{ $i }}\n    runcmd:\n
+      \   {{- if $.Values.vm.qemu_agent_enable }}\n    - - systemctl\n      - enable\n
+      \     - '--now'\n      - qemu-guest-agent.service\n    {{- end }}\n    {{- if
+      not $.Values.vm.airgapped_image }}\n    - mkdir -p /var/lib/rancher/rke2-artifacts
+      && wget https://get.rke2.io -O /var/lib/rancher/install.sh && chmod +x /var/lib/rancher/install.sh\n
+      \   {{- end}}\n    - INSTALL_RKE2_VERSION={{ $.Values.rke2_version }} INSTALL_RKE2_TYPE=\"agent\"
+      /var/lib/rancher/install.sh\n    - systemctl enable rke2-server.service\n    -
+      systemctl start rke2-server.service\n    ssh_authorized_keys: \n    - {{ $.Values.ssh_pub_key
+      }}\n    {{- if ne $.Values.worker.ipam \"dhcp\" }}\n  {{- if hasKey $.Values.worker
+      \"network\" }}\n  networkdata: |\n{{ index $.Values.worker.network $i | indent
+      4 }}\n  {{- end}}\n  {{- else}}\n  networkdata: \"\"\n  {{- end}}\n{{- end}}"
+    name: rke2/templates/rke2_worker_secret.yaml
+  - content: |-
+      {{- range $i := until (.Values.worker.node_count | int) }}
+      ---
+      apiVersion: kubevirt.io/v1
+      kind: VirtualMachine
+      metadata:
+        namespace: {{ $.Values.cluster_namespace }}
+        annotations:
+          harvesterhci.io/volumeClaimTemplates: |
+            [{"metadata":{"name":"{{ $.Values.cluster_name }}-worker-disk-{{ $i }}","annotations":{"harvesterhci.io/imageId":"{{ $.Values.vm.image_namespace }}/{{ $.Values.vm.image }}","helm.app":"rke2"}},"spec":{"accessModes":["ReadWriteMany"],"resources":{"requests":{"storage":"{{ $.Values.worker.node_disk_gb }}Gi"}},"volumeMode":"Block","storageClassName":"longhorn-{{ $.Values.vm.image }}"}}]
+          network.harvesterhci.io/ips: '[]'
+        labels:
+          harvesterhci.io/creator: harvester
+          harvesterhci.io/os: {{ $.Values.vm.os }}
+        name: {{ $.Values.cluster_name }}-worker-{{ $i }}
+        finalizers:
+          - harvesterhci.io/VMController.UnsetOwnerOfPVCs
+      spec:
+        runStrategy: RerunOnFailure
+        template:
+          metadata:
+            annotations: {}
+            labels:
+              harvesterhci.io/vmName: {{ $.Values.cluster_name }}-worker-{{ $i }}
+          spec:
+            domain:
+              machine:
+                type: ''
+              cpu:
+                cores: {{ $.Values.worker.cpu_count }}
+                sockets: 1
+                threads: 1
+              devices:
+                interfaces:
+                  - bridge: {}
+                    model: virtio
+                    name: default
+                disks:
+                  - name: disk-0
+                    disk:
+                      bus: virtio
+                    bootOrder: 1
+                  - name: cloudinitdisk
+                    disk:
+                      bus: virtio
+                hostDevices: []
+              resources:
+                limits:
+                  memory: {{ $.Values.worker.memory_gb }}Gi
+                  cpu: {{ $.Values.worker.cpu_count }}
+              features:
+                acpi:
+                  enabled: {{ $.Values.vm.uefi_enabled }}
+              firmware:
+                bootloader:
+                  efi:
+                    secureBoot: false
+            evictionStrategy: LiveMigrate
+            hostname: {{ $.Values.cluster_name }}-worker-{{ $i }}
+            networks:
+              - name: default
+                multus:
+                  networkName: default/{{ $.Values.network_name }}
+            volumes:
+              - name: disk-0
+                persistentVolumeClaim:
+                  claimName: {{ $.Values.cluster_name }}-worker-disk-{{ $i }}
+              - name: cloudinitdisk
+                cloudInitNoCloud:
+                  secretRef:
+                    name: {{ $.Values.cluster_name }}-worker-{{ $i }}-cloudinit
+                  networkData: ""
+            affinity: {}
+            terminationGracePeriodSeconds: 120
+      {{- end }}
+    name: rke2/templates/rke2_worker_vm.yaml
+  - content: "cluster_name: mycluster\ncluster_namespace: default\n\nshared_token:
+      insecuretoken\nsystem_default_registry: \"\"       #! empty value: use embedded
+      default\n                                  #! non-empty value: use as regsitry
+      to source rke2 runtime image from\n                                  #! if your
+      VM image contains the tarballs for RKE2, it will use those first\nrke2_version:
+      v1.26.10+rke2r2\n\nssh_pub_key: \"\"                   #! the public ssh key
+      to inject onto each node, required if you want to fetch a kubeconfig\n\n# registry_config:\n#
+      \  configs:\n#     \"rgcrprod.azurecr.us\":\n#       auth:\n#         username:
+      test\n#         password: test\n\nvm:\n  image_namespace: default        #!
+      namespace in your harvester cluster containing the vm base image\n  image: ubuntu
+      \                  #! name of base vm image to use for your RKE2 nodes\n  os:
+      linux\n  distro: ubuntu                  #! flag used for specific cloud-init
+      code tied to Ubuntu vs others (netplan)\n  uefi_enabled: true\n  qemu_agent_install:
+      true        #! flag for installation of the qemu-agent service (Requires internet)\n
+      \ qemu_agent_enable: true         #! flag for enabling the qemu-agent\n  airgapped_image:
+      false          #! flag to alert helm that your VM image already has the RKE2
+      install script (and does not need to download it)\n\n\nnetwork_name: host\n\ncontrol_plane:\n
+      \ node_count: 1\n  cpu_count: 4\n  memory_gb: 8\n  node_disk_gb: 40\n  loadbalancer_gateway:
+      10.10.0.1\n  loadbalancer_subnet: 10.10.0.0/24\n  files: []\n  # files:\n  #
+      - path: /tmp/test\n  #   owner: root\n  #   content: |\n  #     created a file\n\n
+      \ vip:                            #! this is the VIP for the Harvester LoadBalancer
+      object, ensure it is a routable IP\n  ipam: dhcp                      #! this
+      can be dhcp or static, static requires an equal amount of cloud-init network-data
+      entries\n\n  # network:\n  # - |   #! ubuntu example\n  #   network:\n  #     version:
+      2\n  #     renderer: networkd\n  #     ethernets:\n  #       enp1s0:\n  #         dhcp4:
+      no\n  #         addresses: [ \"10.10.0.6/24\" ]\n  #         gateway4: 10.10.0.1\n
+      \ #         nameservers:\n  #           addresses: \n  #           - 10.10.0.1\n\nworker:\n
+      \ node_count: 1\n  cpu_count: 4\n  memory_gb: 8\n  node_disk_gb: 40\n  files:
+      []\n  # files:\n  # - path: /tmp/test\n  #   owner: root\n  #   content: |\n
+      \ #     created a file\n\n  ipam: dhcp                      #! this can be dhcp
+      or static, static requires an equal amount of cloud-init network-data entries\n\n
+      \ # network:\n  # - |\n  #   network:\n  #     version: 2\n  #     renderer:
+      networkd\n  #     ethernets:\n  #       enp1s0:\n  #         dhcp4: no\n  #
+      \        addresses: [ \"10.10.0.20/24\" ]\n  #         gateway4: 10.10.0.1\n
+      \ #         nameservers:\n  #           addresses: \n  #           - 10.10.0.1\n"
+    name: rke2/values.yaml
+  - content: "cluster_name: rke2-mgmt\nsystem_default_registry: \"\"\n\nrke2_version:
+      v1.29.6+rke2r1\n\nvm:\n  image: ubuntu\n  qemu_agent_install: true          \n
+      \ qemu_agent_enable: true           \n  airgapped_image: false  \nnetwork_name:
+      lab-workload\nssh_pub_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDK3vpDMfNKbXTkpOwC77k5xvEpUAcNyJa6pYT17YMbzvHuugSJRiouLElDtpqktto6plkDdrTRXnkDA3aVxUycCl/4IrnCEehlg8LGgFxKASNeXQYL0URIWRDicyJaolg5bFdcu3gYTA0JBtApiebrml6bj9cJGnS8lqRK9wmWIFv5lPICcrZMsw1AIRhghGI5BupUnttD+muHspAiGfjTbiiCvKo3fLmEMQ9pt/46wQuPbzOCVChpJByVG9AKO9IpdkOGgKeuy2y98ZxJIHBAx4B49jDfA8NNfyEBIdgiIvlv6QXgjFbazI5buLYM/RK36kf9JjYNBySZJuA3VMbHnWmWvZYBQUA6ypVMc4Wzvd3hhFmNQn1W+NEHl6v+bCDeo5QIv5dkpIoDgJd8CvWQ42bb2bi7zyO32v2zfaW03eDCeopFAKditMPhjqai0S2W4LRt7dRKEOCvUqPFYqZ99nBk1mmTWG8Gpp7VA/+shn171Yc/wDCwBcEyciqOYNtnW55O3eCiBHsnBcEFKy80zHJ1jckDSluypwBrsooYV5WKS8O+jqGyYfdruJ8oUCPw72b0JHs5AmFCRuhzOU6cZP6Ynghs1SkdVtq722uFjmDUR0X8+hoIZDEWutw6+91YhwnodA3MmGHtInlY+URqdz6TltOMP2X2vSMohnh2zQ==\n\nregistry_config:\n
+      \ configs:\n    \"rgcrprod.azurecr.us\":\n      auth:\n        username: test\n
+      \       password: test\n\ncontrol_plane:\n  vip: 10.2.0.20 \n  loadbalancer_gateway:
+      10.2.0.1\n  loadbalancer_subnet: 10.2.0.0/24\n  \n  node_count: 3 \n  cpu_count:
+      8\n  memory_gb: 16\n\n  ipam: static\n  network:\n  - |\n    network:\n      version:
+      2\n      renderer: networkd\n      ethernets:\n        enp1s0:\n          dhcp4:
+      no\n          addresses: [ \"10.2.0.21/24\" ]\n          gateway4: 10.2.0.1\n
+      \         nameservers:\n            addresses: \n            - 10.2.0.1\n  -
+      |\n    network:\n      version: 2\n      renderer: networkd\n      ethernets:\n
+      \       enp1s0:\n          dhcp4: no\n          addresses: [ \"10.2.0.22/24\"
+      ]\n          gateway4: 10.2.0.1\n          nameservers:\n            addresses:
+      \n            - 10.2.0.1\n  - |\n    network:\n      version: 2\n      renderer:
+      networkd\n      ethernets:\n        enp1s0:\n          dhcp4: no\n          addresses:
+      [ \"10.2.0.23/24\" ]\n          gateway4: 10.2.0.1\n          nameservers:\n
+      \           addresses: \n            - 10.2.0.1\n  files:\n  - path: /var/lib/rancher/rke2/server/manifests/certmanager.yaml\n
+      \   owner: root\n    content: |\n      apiVersion: helm.cattle.io/v1\n      kind:
+      HelmChart\n      metadata:\n        name: cert-manager\n        namespace: default
+      \     \n      spec:\n        bootstrap: true\n        targetNamespace: cert-manager\n
+      \       createNamespace: true\n        valuesContent: |-\n          securityContext:\n
+      \           runAsNonRoot: true\n          crds:\n            enabled: true\n
+      \       version: v1.16.1\n        repo: https://charts.jetstack.io\n        chart:
+      cert-manager\n  - path: /var/lib/rancher/rke2/server/manifests/rancher.yaml\n
+      \   owner: root\n    content: |\n      apiVersion: helm.cattle.io/v1\n      kind:
+      HelmChart\n      metadata:\n        name: rancher\n        namespace: default
+      \     \n      spec:\n        bootstrap: false\n        targetNamespace: cattle-system\n
+      \       createNamespace: true\n        set:\n          hostname: rancher.lab.sienarfleet.systems\n
+      \         replicas: 3\n          bootstrapPassword: admin\n        valuesContent:
+      |-\n          global:\n            cattle:\n              psp:\n                enabled:
+      false\n          ingress:\n            tls:\n              source: rancher\n
+      \       repo: https://releases.rancher.com/server-charts/stable\n        chart:
+      rancher\n        version: v2.10.1\nworker:\n  node_count: 0"
+    name: values.yaml
+  targetRestrictions:
+  - clusterName: local
+  targets:
+  - clusterName: local
+    ignore: {}
