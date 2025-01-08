@@ -1,124 +1,107 @@
-# RKE2 Cluster Creation
+# Experimental Addon for Rancher on RKE2 Autoinstall
 
-This doc pertains to the management cluster that must be installed on top of Harvester as a guest cluster in order to run Rancher in a highly-available and airgap friendly mode.
+This will cover an experimental and PoC-grade addon for Harvester that can be used to install an RKE2 guest cluster into Harvester directly without requiring any external tools or dependencies outside of what Harvester comes with. This installs a full-blown version of Rancher onto a guest cluster. In the past you would use Terraform or Ansible for this, but now we do not need it.
 
-There are many paths to installing RKE2 into Harvester. It can be done manually via VM creation and installing RKE2 directly on top. We can use Terraform or Ansible playbooks in order to provision the cluster. And the newer way is using ClusterAPI (CAPI) to deploy RKE2 declaratively as a Kubernetes resource on Harvster.
+This solution uses Harvester to spin up a temporary vcluster and uses that as a CAPI bootstrap cluster via the CAPI operator. From there it uses the RKE2 ControlPlane and Bootstrap CAPI providers along with the Harvester Infrastructure provider (currently in beta)
 
-Given the new path with CAPI, it is the future way of managing clusters both in the direction of Rancher but also how the industry is trending, I'm going to cover that here instead of the other options.
+There are limitations here:
+* The Harvester Infra Provider has a few limitations including
+  * Requiring embedding a Harvester kubeconfig with a very specific name in base64 format
+  * CPU counts do not reflect actual CPU consumption due to a provisioning bug (desired cpu cores end up being pasted into sockets and threads)
+  * LoadBalancing requires usage of DHCP and cannot do static IP assignment inline (yet)
+  * Using agentConfig.additionalUserData field in RKE2ControlPlane objects will break the Harvester provider
+  * Currently there is no way to manage static IP addresses for control plane nodes
+  * The VM instances in Harvester have hardcoded cloud-init configurations and do not support any flags such as UEFI, so UEFI-only OS's such as Rocky will likely not work
+* The Harvester Addon has hardcoded UI elements, so using a custom Addon will not render any fields and requires manual yaml editing
 
-## Dependencies
+### Known Issues
+* vcluster uses stateful sets and does not by default clean up its volumes, this can cause issues if you repeatedly use it as the existing kubernetes state of vcluster will be resumed vs being reinstalled. So ensure you delete the PVC
 
-CAPI requires a bootstrap cluster to exist. You can use KinD or k3d. I'll use k3d here. There are also other tools associated
+## Howto
 
-* Docker
-* K3D
-* kubectl
-* clusterctl
-* Base VM image
-* Harvester SSH key generated
-* Harvester Network created
-* Harvester kubeconfig is in `$HOME/.kube/config`
-* envsubst (usually included in bash/zsh)
-
-## Configuration
-
-CAPI functions based on a template + values file pattern. The template uses simple bash-like variables that `clusterctl` will edit in place based on either environment variables defined at runtime or based on a configuration yaml file.
-
-That configuration file is [clusterctl.yaml](./clusterctl.yaml). Pay particular attention to the network and vm image names as they correspond to pre-existing objects inside of Harvester.
-
-## Scripted Install Process (RKE2 and Rancher)
-
-Using the below manual steps, two scripts have been created to install RKE2 and Rancher using CAPI. This assumes values have been defined properly in [clusterctl.yaml](./clusterctl.yaml)
-
-To get a better understanding of how these scripts work (they are not intelligent or stateful), its recommended you try the manual route below first. I have placed a 7min sleep inbetween the commands because that is about how long it takes for the 3rd node to come up in an unoptimized state. When working in an airgap, this process can be shrunk down far and the steps also combined with some webhooks if necessary.  But I would consider keeping them split because there is no CR reference dependencies between the two beyond a cluster name. So the rancher template could arguably work on any infra provider. I'm trying to keep it simple right now, so we'll stick with this.
+Install the addon into the Harvester cluster as-is:
 
 ```bash
-./install_rke2.sh
-sleep 420
-./install_rancher.sh
+kubectl apply -f addon.yaml
 ```
 
-## Manual Install Process (RKE2)
-
-First, create your K3D boostrap cluster:
-```bash
-k3d cluster create
-```
-
-Next, install the CAPI dependencies using clusterctl:
-```bash
-export EXP_CLUSTER_RESOURCE_SET=true
-export CLUSTER_TOPOLOGY=true
-clusterctl --config clusterctl.yaml init -i harvester --bootstrap rke2 --control-plane rke2
-```
-
-The CAPI components will now install, you can run the below commands to wait:
-```bash
-kubectl rollout status deployment --timeout=90s -n rke2-bootstrap-system rke2-bootstrap-controller-manager
-kubectl rollout status deployment --timeout=90s -n rke2-control-plane-system rke2-control-plane-controller-manager
-kubectl rollout status deployment --timeout=90s -n caphv-system caphv-controller-manager
-```
-
-Once CAPI components have installed, you can use `clusterctl` to generate the Kubernetes configuration and apply it to your bootstrap cluster. You can always output this to a file and then apply separately if you want to inspect. 
-
-First, the Harvester kubeconfig needs to be grabbed and converted into a proper format. That can be done with this snippet (change the `HARVESTER_CLUSTER_NAME` variable to whatever the cluster context name is for your Harvester cluster):
+Or if you prefer to skip the addon steps, just use the [helmchart file](./helmchart.yaml) directly (ensure you edit it properly)
 
 ```bash
-export HARVESTER_CONTEXT_NAME=dell
-kubectl config use-context ${HARVESTER_CONTEXT_NAME}
-export HARVESTER_KUBECONFIG_B64=$(kubectl config use-context ${HARVESTER_CONTEXT_NAME} &>/dev/null && kubectl config view --minify --flatten | yq '.contexts[0].name = "'${HARVESTER_CONTEXT_NAME}'"' | yq '.current-context = "'${HARVESTER_CONTEXT_NAME}'"' | yq '.clusters[0].name = "'${HARVESTER_CONTEXT_NAME}'"' | yq '.contexts[0].context.cluster = "'${HARVESTER_CONTEXT_NAME}'"' | base64 -w0); \
-kubectl config use-context k3d-k3s-default
+kubectl apply -f helmchart.yaml
 ```
 
-We also need to create the IP Pool in Harvester. In the future this step will not be necessary as ipPool definitions inline will be implemented. Right now we need to create an IPPool object in our Harvester cluster that defines valid IPs for loadbalancing. Since this is a single LB pool, the IPPool will define one IP address only. Note I'm defining the IPs inline below, so you will need to adjust. But the scripts above will use `yq` to pull the values from the [clusterctl.yaml](./clusterctl.yaml) file instead.
+Once installed, go to the Harvester Addons menu under Advanced->Addons and click the `...` menu to the right on the `rancher-embedded` addon. Click `Edit Config`.
 
-To apply, we need to switch to the harvester cluster and apply the [ip_pool cr](./ippool.yaml):
+Click the `Enable` button and then select `Edit Yaml` at the bottom. From here is where you will edit the values in the addon at the top.
 
+The values to edit are:
+```yaml
+    vm_network_name: ""
+    ssh_keypair: ""
+    vm_image_name: ""
+    vm_default_user: ""
+    harvester_vip: ""
+    rancher_url: ""
+    harvester_kubeconfig_b64: ""
+```
+
+Everything should be obvious here except for the harvester kubeconfig. The easiest path is to go to download the harvester kubeconfig file and then convert it into base64.
+
+On Linux, base64 requires `-w0` and MacOS does not
 ```bash
-export HARVESTER_CONTEXT_NAME=dell
-kubectl config use-context ${HARVESTER_CONTEXT_NAME}
-export LOAD_BALANCER_IP=10.2.0.3
-export LOAD_BALANCER_GATEWAY=10.2.0.1
-export LOAD_BALANCER_CIDR=10.2.0.0/24
-cat ippool.yaml | envsubst | kubectl apply -f -
-kubectl config use-context k3d-k3s-default
+#linux
+cat ~/Downloads/local.yaml | base64 -w0
+#macos
+cat ~/Downloads/local.yaml | base64
 ```
 
-Now that the credentials have been grabbed, `clusterctl` can be run and the output piped to `kubectl` for creation:
+Once the values are placed into the appropriate fields, hit 'save'. 
 
-```bash
-export CLUSTER_NAME=rke2-mgmt
-clusterctl generate cluster --from rke2_template.yaml \
-  --config clusterctl.yaml \
-  ${CLUSTER_NAME} \
-  | kubectl apply -f -
+### Progress
+
+Underhood, the first thing that will happen is Harvester will attempt to install a vcluster instance into the bare metal RKE2 cluster.
+
+After the cluster starts, it will run the pods in the local Harvester cluster using specific names and also within the same namespace as the vcluster instance. Using this addon will place that into default for now.
+
+You can watch progress using `watch kubectl get po`. It takes a few minutes for all of the orchestration to work including the CAPI components/providers to be installed. 
+
+Once everything is running it will look something like this:
+```console
+❯ kubectl get po
+NAME                                                              READY   STATUS      RESTARTS        AGE
+act-runner-55746f5496-tjd7p                                       1/1     Running     55 (61m ago)    5h26m
+bootstrap-cluster-cluster-api-operator-bfcf86f56-7vf-0f378249f8   1/1     Running     0               32m
+caphv-controller-manager-b64f46f7b-mbkhf-x-caphv-sys-032300ba48   2/2     Running     0               31m
+capi-controller-manager-59f959f88c-8q4r4-x-capi-syst-e7732a666f   1/1     Running     0               31m
+cert-manager-5d58d69944-wvg5t-x-cert-manager-x-rancher-embedded   1/1     Running     0               32m
+cert-manager-cainjector-54985976df-4vzwg-x-cert-mana-2144030793   1/1     Running     0               32m
+cert-manager-webhook-5fcfcd455-mxlhf-x-cert-manager--d1f937cca4   1/1     Running     0               32m
+coredns-5964bd6fd4-f8j5q-x-kube-system-x-rancher-embedded         1/1     Running     0               32m
+helm-install-bootstrap-cluster-xp4z4-x-default-x-ran-2182ba190e   0/1     Completed   2               32m
+helm-install-cert-manager-5l2fn-x-default-x-rancher-embedded      0/1     Completed   0               32m
+helm-install-rancher-embedded-psc98                               0/1     Completed   0               33m
+homepage-6d76d9dc47-2jdgx                                         1/1     Running     4 (5h28m ago)   4d4h
+rancher-embedded-0                                                1/1     Running     0               33m
+rke2-bootstrap-controller-manager-6f7d89cc94-6465s-x-1f18bbe86b   1/1     Running     0               31m
+rke2-control-plane-controller-manager-5dbcdd76f4-dz6-b566dd9bbf   1/1     Running     0               31m
 ```
 
-As the cluster is created, the VM creation can be seen in the Harvester console but the more granular status can be viewed using `clusterctl`
+The CAPI provisioner should start creating Harvester VMs as RKE2 nodes soon after and they will show up in the UI or as virt-launchers:
 
-```bash
-clusterctl describe cluster ${CLUSTER_NAME}
+```console
+virt-launcher-rke2-mgmt-cp-machine-9cxnq-vcwrh                    2/2     Running     0               31m
+virt-launcher-rke2-mgmt-cp-machine-hjqlm-hlcrq                    2/2     Running     0               25m
+virt-launcher-rke2-mgmt-cp-machine-w6hmm-8sd86                    2/2     Running     0               28m
 ```
 
-## Install Process (Rancher)
-
-Once the cluster is up and running, its very easy to install Rancher. In fact you don't need the helm cli at all, you can just take advantage of `ClusterResourceSet` CRs. We will create one that includes the helmchart CRs for both cert-manager and rancher. For now these pull from the internet but the chart can either be declared inline or referenced elsewhere for airgap friendliness.
-
-```bash
-export CLUSTER_NAME=rke2-mgmt
-clusterctl generate cluster --from rancher_template.yaml \
-  --config clusterctl.yaml \
-  ${CLUSTER_NAME} \
-  | kubectl apply -f -
+After a time the CAPI provisioner will create a LoadBalancer object in Harvester. For now this is DHCP, so inspect your loadbalancers to get the IP in the UI. Or just use `kubectl`:
+```console
+❯ kubectl get loadbalancer
+NAME                      DESCRIPTION                              WORKLOADTYPE   IPAM   ADDRESS     AGE
+default-rke2-mgmt-hv-lb   Load Balancer for cluster rke2-mgmt-hv   vm             dhcp   10.2.0.76   33m
 ```
 
-# Cleanup
+Note my IP is 10.2.0.76. So I will either make a DNS entry for my rancher URL or edit `/etc/hosts` as a quick hack. Once that change is made, the Rancher UI should present itself. The bootstrap password is `admin`
 
-Once everything is complete, you can either copy the existing configuration out for a permanent copy or just delete the K3D cluster. Please note that when deleting the K3D cluster, it will not delete the cluster you just created with it. That can be done by the command below:
 
-```bash
-kubectl delete cluster rke2-mgmt
-```
-
-# Next Steps
-Changing the nodes to be static IPs, likely involving cloud-init.

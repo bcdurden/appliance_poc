@@ -1,0 +1,261 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: rancher-embedded
+spec:
+  chart: vcluster
+  version: 0.19.0
+  repo: https://charts.loft.sh
+  valuesContent: |
+    vm_network_name: ${VM_NETWORK}
+    ssh_keypair: ${VM_SSH_KEYPAIR}
+    vm_image_name: ${VM_IMAGE_NS_AND_NAME}
+    vm_default_user: ${VM_DEFAULT_USER}
+    harvester_vip: ${HARVESTER_VIP}
+    rancher_url: ${RANCHER_URL}
+    harvester_kubeconfig_b64: ${HARVESTER_KUBECONFIG_B64}
+
+    vcluster:
+      image: rancher/k3s:v1.30.6-k3s1
+    sync:
+      ingresses:
+        enabled: "true"
+
+    init:
+      manifestsTemplate: |-
+        ---
+        apiVersion: helm.cattle.io/v1
+        kind: HelmChart
+        metadata:
+          name: cert-manager
+        spec:
+          chart: cert-manager
+          createNamespace: true
+          version: v1.13.0
+          repo: https://charts.jetstack.io
+          targetNamespace: cert-manager
+          valuesContent: |
+            installCRDs: true
+        ---
+        apiVersion: helm.cattle.io/v1
+        kind: HelmChart
+        metadata:
+          name: bootstrap-cluster
+        spec:
+          chart: cluster-api-operator
+          repo: https://kubernetes-sigs.github.io/cluster-api-operator
+          version: v0.14.0
+          valuesContent: |
+            cert-manager:
+              enabled: true
+            bootstrap: rke2
+            controlPlane: rke2
+        ---
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: caphv-system
+        ---
+        apiVersion: operator.cluster.x-k8s.io/v1alpha2
+        kind: InfrastructureProvider
+        metadata:
+          name: harvester
+          namespace: caphv-system
+        spec:
+          version: v0.1.4
+          fetchConfig: 
+            url: https://github.com/rancher-sandbox/cluster-api-provider-harvester/releases/download/v0.1.4/components.yaml
+        ---
+        apiVersion: cluster.x-k8s.io/v1beta1
+        kind: Cluster
+        metadata:
+          labels:
+            ccm: external
+            cluster.x-k8s.io/cluster-name: rke2-mgmt
+            cni: external
+            csi: external
+          name: rke2-mgmt
+          namespace: default
+        spec:
+          controlPlaneRef:
+            apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+            kind: RKE2ControlPlane
+            name: rke2-mgmt-control-plane
+          infrastructureRef:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+            kind: HarvesterCluster
+            name: rke2-mgmt-hv
+        ---
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: HarvesterCluster
+        metadata:
+          name: rke2-mgmt-hv
+          namespace: default
+        spec:
+          identitySecret:
+            name: hv-identity-secret
+            namespace: default
+          loadBalancerConfig:
+            ipamType: dhcp
+            listeners:
+            - backendPort: 9345
+              name: rke2-server
+              port: 9345
+              protocol: TCP
+            - backendPort: 443
+              name: rke2-ingress
+              port: 443
+              protocol: TCP
+          server: {{ .Values.harvester_vip }}
+          targetNamespace: default
+        ---
+        apiVersion: v1
+        data:
+          kubeconfig: {{ .Values.harvester_kubeconfig_b64 }}
+        kind: Secret
+        metadata:
+          name: hv-identity-secret
+          namespace: default
+        ---
+        apiVersion: controlplane.cluster.x-k8s.io/v1alpha1
+        kind: RKE2ControlPlane
+        metadata:
+          name: rke2-mgmt-control-plane
+          namespace: default
+        spec:
+          agentConfig:
+            version: v1.29.6+rke2r1
+          infrastructureRef:
+            apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+            kind: HarvesterMachineTemplate
+            name: rke2-mgmt-cp-machine
+            namespace: default
+          replicas: 3
+          serverConfig:
+            cni: canal
+        ---
+        apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+        kind: RKE2ConfigTemplate
+        metadata:
+          name: rke2-mgmt-worker
+          namespace: default
+        spec:
+          template:
+            spec:
+              agentConfig:
+                version: v1.29.6+rke2r1
+        ---
+        apiVersion: cluster.x-k8s.io/v1beta1
+        kind: MachineDeployment
+        metadata:
+          name: rke2-mgmt-workers
+          namespace: default
+        spec:
+          clusterName: rke2-mgmt
+          replicas: 0
+          selector:
+            matchLabels:
+              cluster.x-k8s.io/cluster-name: rke2-mgmt
+          template:
+            spec:
+              bootstrap:
+                configRef:
+                  apiVersion: bootstrap.cluster.x-k8s.io/v1alpha1
+                  kind: RKE2ConfigTemplate
+                  name: rke2-mgmt-worker
+                  namespace: default
+              clusterName: rke2-mgmt
+              infrastructureRef:
+                apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+                kind: HarvesterMachineTemplate
+                name: rke2-mgmt-wk-machine
+                namespace: default
+              version: v1.29.6+rke2r1
+        ---
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: HarvesterMachineTemplate
+        metadata:
+          name: rke2-mgmt-wk-machine
+          namespace: default
+        spec:
+          template:
+            spec:
+              cpu: 2
+              memory: 16Gi
+              networks:
+              - {{ .Values.vm_network_name }}
+              sshKeyPair: default/{{ .Values.ssh_keypair }}
+              sshUser: {{ .Values.vm_default_user }}
+              volumes:
+              - bootOrder: 0
+                imageName: default/{{ .Values.vm_image_name }}
+                volumeSize: 40Gi
+                volumeType: image
+        ---
+        apiVersion: infrastructure.cluster.x-k8s.io/v1alpha1
+        kind: HarvesterMachineTemplate
+        metadata:
+          name: rke2-mgmt-cp-machine
+          namespace: default
+        spec:
+          template:
+            spec:
+              cpu: 2
+              memory: 16Gi
+              networks:
+              - {{ .Values.vm_network_name }}
+              sshKeyPair: default/{{ .Values.ssh_keypair }}
+              sshUser: {{ .Values.vm_default_user }}
+              volumes:
+              - bootOrder: 0
+                imageName: default/{{ .Values.vm_image_name }}
+                volumeSize: 40Gi
+                volumeType: image
+        ---
+        apiVersion: addons.cluster.x-k8s.io/v1beta1
+        kind: ClusterResourceSet
+        metadata:
+          labels:
+            cluster.x-k8s.io/cluster-name: rke2-mgmt
+          name: rke2-mgmt-rancher-crs-0
+          namespace: default
+        spec:
+          clusterSelector:
+            matchLabels:
+              cluster.x-k8s.io/cluster-name: rke2-mgmt
+          resources:
+          - kind: Secret
+            name: rancher-namespace
+          - kind: Secret
+            name: rancher-helmchart
+          - kind: Secret
+            name: certmanager-helmchart
+          strategy: Reconcile
+        ---
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: certmanager-helmchart
+          namespace: default
+        stringData:
+          data: "apiVersion: helm.cattle.io/v1\nkind: HelmChart\nmetadata:\n  name: cert-manager\n
+            \ namespace: default      \nspec:\n  bootstrap: true\n  targetNamespace: cert-manager\n
+            \ createNamespace: true\n  valuesContent: |-\n    securityContext:\n      runAsNonRoot:
+            true\n    crds:\n      enabled: true\n  version: v1.16.1\n  repo: https://charts.jetstack.io\n
+            \ chart: cert-manager\n"
+        type: addons.cluster.x-k8s.io/resource-set
+        ---
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: rancher-helmchart
+          namespace: default
+        stringData:
+          data: "apiVersion: helm.cattle.io/v1\nkind: HelmChart\nmetadata:\n  name: rancher\n
+            \ namespace: default      \nspec:\n  bootstrap: false\n  targetNamespace: cattle-system\n
+            \ createNamespace: true\n  set:\n    hostname: {{ .Values.rancher_url }}\n
+            \   replicas: 3\n    bootstrapPassword: admin\n  valuesContent: |-\n    global:\n
+            \     cattle:\n        psp:\n          enabled: false\n    ingress:\n      tls:\n
+            \       source: rancher\n  repo: https://releases.rancher.com/server-charts/latest\n
+            \ chart: rancher\n  version: v2.10.0\n"
+        type: addons.cluster.x-k8s.io/resource-set
